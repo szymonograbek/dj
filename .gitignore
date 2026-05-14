@@ -1,0 +1,5 @@
+.env
+memory/
+.spotify-token.json
+.DS_Store
+node_modules/
