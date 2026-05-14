@@ -3,8 +3,11 @@ const http = require('node:http');
 const { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } = require('node:fs');
 const { randomBytes, createHash } = require('node:crypto');
 const { URL, URLSearchParams } = require('node:url');
-const { join } = require('node:path');
-const { backupMemory, memoryDir } = require('./memory-config');
+const { join, resolve } = require('node:path');
+
+function memoryDir() {
+  return resolve(readEnv().MEMORY_DIR || 'memory');
+}
 
 const ENV_PATH = '.env';
 const TOKEN_PATH = '.spotify-token.json';
@@ -128,6 +131,121 @@ function trackUri(value) {
   throw new Error(`Not a Spotify track id/uri: ${value}`);
 }
 
+function print(data) {
+  console.log(JSON.stringify(data, null, 2));
+}
+
+function cleanSpotifyLimit(value, fallback, max = 50) {
+  const raw = value || fallback;
+  if (!/^\d+$/.test(raw)) throw new Error(`Limit must be an integer from 1 to ${max}`);
+  const limit = Number.parseInt(raw, 10);
+  if (limit < 1 || limit > max) throw new Error(`Limit must be an integer from 1 to ${max}`);
+  return String(limit);
+}
+
+function queryAndLimit(args, fallbackLimit) {
+  if (args.length === 0) return { query: '', limit: fallbackLimit };
+  const maybeLimit = args.length > 1 ? args.at(-1) : undefined;
+  const parsedLimit = Number.parseInt(maybeLimit || '', 10);
+  if (/^\d+$/.test(maybeLimit || '') && parsedLimit >= 1 && parsedLimit <= 50) return { query: args.slice(0, -1).join(' '), limit: maybeLimit };
+  return { query: args.join(' '), limit: fallbackLimit };
+}
+
+function artistNames(artists) {
+  return (artists || []).map((artist) => artist.name).filter(Boolean);
+}
+
+function artistLabel(artists) {
+  return artistNames(artists).join(', ');
+}
+
+function compactTrack(track) {
+  return {
+    name: track.name,
+    artists: artistLabel(track.artists),
+    album: track.album?.name,
+    release: track.album?.release_date,
+    id: track.id,
+    popularity: track.popularity,
+  };
+}
+
+function compactArtist(artist) {
+  return {
+    name: artist.name,
+    id: artist.id,
+    genres: (artist.genres || []).slice(0, 5).join(', '),
+    popularity: artist.popularity,
+    followers: artist.followers?.total,
+  };
+}
+
+function compactAlbum(album) {
+  return {
+    name: album.name,
+    artists: artistLabel(album.artists),
+    type: album.album_type,
+    release: album.release_date,
+    total_tracks: album.total_tracks,
+    id: album.id,
+  };
+}
+
+function compactSearch(type, query, result) {
+  const key = `${type}s`;
+  const items = result[key]?.items || [];
+  const compact = { track: compactTrack, artist: compactArtist, album: compactAlbum }[type];
+  return { query, type, total: result[key]?.total || 0, results: items.map(compact) };
+}
+
+function compactPlayedItem(item) {
+  return { played_at: item.played_at, ...compactTrack(item.track) };
+}
+
+function compactMe(user) {
+  return {
+    id: user.id,
+    display_name: user.display_name,
+    country: user.country,
+    product: user.product,
+    followers: user.followers?.total,
+  };
+}
+
+function compactPlaylist(playlist) {
+  const items = (playlist.tracks?.items || []).filter((item) => item.track);
+  return {
+    id: playlist.id,
+    name: playlist.name,
+    total: playlist.tracks?.total || items.length,
+    shown: items.length,
+    tracks: items.map((item, index) => ({ position: index + 1, ...compactTrack(item.track) })),
+  };
+}
+
+function compactSyncResult(result) {
+  return {
+    scope: result.scope,
+    created_count: result.created.length,
+    skipped_count: result.skipped.length,
+    created_sample: result.created.slice(0, 20),
+    backup: result.backup,
+  };
+}
+
+function mergeLibraryMatches(matches) {
+  const byKey = new Map();
+  for (const match of matches) {
+    const key = `${match.album ? 'track' : 'artist'}:${match.id || match.name}`;
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.source = `${existing.source}, ${match.source}`;
+    } else {
+      byKey.set(key, { ...match });
+    }
+  }
+  return Array.from(byKey.values());
+}
 
 function artistMatches(artists, query) {
   const needle = query.toLowerCase();
@@ -203,39 +321,39 @@ async function artistReleases(query, limit = '10') {
       name: album.name,
       id: album.id,
       type: album.album_type,
-      release_date: album.release_date,
+      release: album.release_date,
       total_tracks: album.total_tracks,
-      artists: album.artists.map((item) => item.name),
-      url: album.external_urls.spotify,
+      artists: artistLabel(album.artists),
     });
   }
-  releases.sort((left, right) => right.release_date.localeCompare(left.release_date));
-  return { query, found: true, artist: { name: artist.name, id: artist.id, url: artist.external_urls.spotify }, releases: releases.slice(0, Number.parseInt(limit, 10) || 10) };
+  releases.sort((left, right) => (right.release || '').localeCompare(left.release || ''));
+  return { query, found: true, artist: { name: artist.name, id: artist.id }, releases: releases.slice(0, Number.parseInt(cleanSpotifyLimit(limit, '10'), 10)) };
 }
 
 async function findArtistInLibrary(query) {
   const matches = [];
   const recent = await api('GET', '/me/player/recently-played?limit=50');
   for (const item of recent.items || []) {
-    if (item.track && artistMatches(item.track.artists || [], query)) matches.push({ source: 'recently-played', track: item.track.name, artists: item.track.artists.map((artist) => artist.name), id: item.track.id });
+    if (item.track && artistMatches(item.track.artists || [], query)) matches.push({ source: 'recently-played', ...compactTrack(item.track) });
   }
 
   const topArtists = await api('GET', '/me/top/artists?limit=50&time_range=long_term');
   for (const artist of topArtists.items || []) {
-    if (artist.name.toLowerCase().includes(query.toLowerCase())) matches.push({ source: 'top-artists-long-term', artist: artist.name, id: artist.id });
+    if (artist.name.toLowerCase().includes(query.toLowerCase())) matches.push({ source: 'top-artists-long-term', ...compactArtist(artist) });
   }
 
   for (const item of await savedTracks()) {
     const track = item.track;
-    if (artistMatches(track.artists || [], query)) matches.push({ source: item.source, track: track.name, artists: track.artists.map((artist) => artist.name), id: track.id });
+    if (artistMatches(track.artists || [], query)) matches.push({ source: item.source, ...compactTrack(track) });
   }
 
   for (const item of await djPlaylistTracks()) {
     const track = item.track;
-    if (artistMatches(track.artists || [], query)) matches.push({ source: item.source, track: track.name, artists: track.artists.map((artist) => artist.name), id: track.id });
+    if (artistMatches(track.artists || [], query)) matches.push({ source: item.source, ...compactTrack(track) });
   }
 
-  return { query, found: matches.length > 0, matches };
+  const merged = mergeLibraryMatches(matches);
+  return { query, found: merged.length > 0, total_matches: merged.length, matches: merged.slice(0, 50) };
 }
 
 function today() {
@@ -372,69 +490,81 @@ async function syncKnownTracks(scope) {
       created.push(path);
     }
   }
-  const backup = created.length === 0 ? { backedUp: false, reason: 'no changes' } : backupMemory('Spotify memory sync backup');
-  return { scope, created, skipped, backup };
+  return { scope, created, skipped };
 }
 
 async function main() {
   const [group, cmd, ...args] = process.argv.slice(2);
   if (group === 'auth' && cmd === 'login') return login();
-  if (group === 'me') return console.log(JSON.stringify(await api('GET', '/me'), null, 2));
-  if (group === 'recently-played') return console.log(JSON.stringify(await api('GET', `/me/player/recently-played?limit=${encodeURIComponent(cmd || '20')}`), null, 2));
+  if (group === 'me') return print(compactMe(await api('GET', '/me')));
+  if (group === 'recently-played') {
+    const result = await api('GET', `/me/player/recently-played?limit=${encodeURIComponent(cleanSpotifyLimit(cmd, '20'))}`);
+    return print({ total: result.items?.length || 0, tracks: (result.items || []).filter((item) => item.track).map(compactPlayedItem) });
+  }
   if (group === 'search') {
     const type = cmd;
-    const [query, limit = '10'] = args;
+    const { query, limit } = queryAndLimit(args, '5');
     if (!['track', 'artist', 'album'].includes(type) || !query) throw new Error('Usage: ./spotify.js search <track|artist|album> <query> [limit]');
-    return console.log(JSON.stringify(await api('GET', `/search?type=${type}&q=${encodeURIComponent(query)}&limit=${encodeURIComponent(limit)}`), null, 2));
+    const result = await api('GET', `/search?type=${type}&q=${encodeURIComponent(query)}&limit=${encodeURIComponent(cleanSpotifyLimit(limit, '5'))}`);
+    return print(compactSearch(type, query, result));
   }
   if (group === 'artist' && cmd === 'releases') {
     const limit = args.at(-1) && /^\d+$/.test(args.at(-1)) ? args.pop() : '10';
     const query = args.join(' ');
     if (!query) throw new Error('Usage: ./spotify.js artist releases <artist_name> [limit]');
-    return console.log(JSON.stringify(await artistReleases(query, limit), null, 2));
+    return print(await artistReleases(query, limit));
   }
   if (group === 'library' && cmd === 'find-artist') {
     const query = args.join(' ');
     if (!query) throw new Error('Usage: ./spotify.js library find-artist <artist_name>');
-    return console.log(JSON.stringify(await findArtistInLibrary(query), null, 2));
+    return print(await findArtistInLibrary(query));
   }
   if (group === 'memory' && cmd === 'sync-known') {
-    return console.log(JSON.stringify(await syncKnownTracks(args[0] || 'recent'), null, 2));
+    return print(compactSyncResult(await syncKnownTracks(args[0] || 'recent')));
   }
   if (group === 'playlist' && cmd === 'show') {
     const id = requireEnv('SPOTIFY_DJ_PLAYLIST_ID');
-    return console.log(JSON.stringify(await api('GET', `/playlists/${encodeURIComponent(id)}?fields=id,name,external_urls,tracks.items(track(id,name,artists(name,id),uri))`), null, 2));
+    const limit = cleanSpotifyLimit(args[0], '50', 100);
+    const playlist = await api('GET', `/playlists/${encodeURIComponent(id)}?fields=id,name`);
+    const tracks = await api('GET', `/playlists/${encodeURIComponent(id)}/tracks?fields=total,items(track(id,name,artists(name,id),album(name,release_date),popularity))&limit=${encodeURIComponent(limit)}`);
+    return print(compactPlaylist({ ...playlist, tracks }));
   }
   if (group === 'playlist' && cmd === 'init') {
     const name = readEnv().SPOTIFY_DJ_PLAYLIST_NAME || 'Personal DJ';
     const me = await api('GET', '/me');
     const created = await api('POST', `/users/${encodeURIComponent(me.id)}/playlists`, { name, public: false, description: '' });
     upsertEnv('SPOTIFY_DJ_PLAYLIST_ID', created.id);
-    return console.log(JSON.stringify({ id: created.id, name: created.name, url: created.external_urls.spotify }, null, 2));
+    return print({ id: created.id, name: created.name, url: created.external_urls.spotify });
   }
   if (group === 'playlist' && cmd === 'add') {
     if (args.length === 0) throw new Error('Usage: ./spotify.js playlist add <track_id_or_uri> [more...]');
     const id = requireEnv('SPOTIFY_DJ_PLAYLIST_ID');
-    return console.log(JSON.stringify(await api('POST', `/playlists/${encodeURIComponent(id)}/items`, { uris: args.map(trackUri) }), null, 2));
+    return print(await api('POST', `/playlists/${encodeURIComponent(id)}/items`, { uris: args.map(trackUri) }));
   }
   if (group === 'playlist' && cmd === 'clear') {
-    return console.log(JSON.stringify(await clearDjPlaylist(), null, 2));
+    await clearDjPlaylist();
+    return print({ ok: true, action: 'playlist clear' });
   }
   if (group === 'playlist' && cmd === 'play') {
-    return console.log(JSON.stringify(await playDjPlaylist(args[0] || '1'), null, 2));
+    await playDjPlaylist(args[0] || '1');
+    return print({ ok: true, action: 'playlist play', position: Number.parseInt(args[0] || '1', 10) });
   }
   if (group === 'playback' && cmd === 'play-track') {
     if (!args[0]) throw new Error('Usage: ./spotify.js playback play-track <track_id_or_uri>');
-    return console.log(JSON.stringify(await playTrack(args[0]), null, 2));
+    await playTrack(args[0]);
+    return print({ ok: true, action: 'playback play-track', uri: trackUri(args[0]) });
   }
   if (group === 'playback' && cmd === 'pause') {
-    return console.log(JSON.stringify(await api('PUT', '/me/player/pause'), null, 2));
+    await api('PUT', '/me/player/pause');
+    return print({ ok: true, action: 'playback pause' });
   }
   if (group === 'playback' && cmd === 'next') {
-    return console.log(JSON.stringify(await api('POST', '/me/player/next'), null, 2));
+    await api('POST', '/me/player/next');
+    return print({ ok: true, action: 'playback next' });
   }
   if (group === 'playback' && cmd === 'previous') {
-    return console.log(JSON.stringify(await api('POST', '/me/player/previous'), null, 2));
+    await api('POST', '/me/player/previous');
+    return print({ ok: true, action: 'playback previous' });
   }
   throw new Error(`Usage:
   ./spotify.js auth login
@@ -445,7 +575,7 @@ async function main() {
   ./spotify.js library find-artist <artist_name>
   ./spotify.js memory sync-known <recent|playlist|saved|all>
   ./spotify.js playlist init
-  ./spotify.js playlist show
+  ./spotify.js playlist show [limit]
   ./spotify.js playlist add <track_id_or_uri> [more...]
   ./spotify.js playlist clear
   ./spotify.js playlist play [position]

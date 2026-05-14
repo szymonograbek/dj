@@ -1,0 +1,36 @@
+type: preference
+description: Durable or time-sensitive reusable taste note
+path:
+  pattern: "preferences/{valid_from}-{slug(name)}.md"
+frontmatter:
+  required:
+    name: { type: string }
+    target_type:
+      type: enum
+      values: [artist, genre, track, album, voice, mood, production, general]
+    target: { type: string }
+    stance:
+      type: enum
+      values: [likes, avoid, curious, neutral, mood-reference]
+    strength:
+      type: enum
+      values: [low, medium, high]
+    valid_from: { type: date }
+  optional:
+    tags:
+      type: array
+      items: { type: string }
+    decay_days:
+      type: int
+      min: 1
+search:
+  fields: [name, target_type, target, stance, strength, tags]
+  title: "{name}"
+body: |
+  # Preference: {name}
+
+  Evidence:
+  -
+
+  Recommendation effect:
+  -

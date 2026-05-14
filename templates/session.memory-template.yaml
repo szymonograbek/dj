@@ -1,0 +1,33 @@
+type: session
+description: One-off recommendation/session context
+path:
+  pattern: "sessions/{date}-{slug(name)}.md"
+frontmatter:
+  required:
+    name: { type: string }
+    date: { type: date }
+    status: { type: string }
+    tags:
+      type: array
+      items: { type: string }
+  optional:
+    tracks:
+      type: array
+      items: { type: string }
+    spotify_ids:
+      type: array
+      items: { type: string }
+search:
+  fields: [name, status, tags, tracks]
+  title: "{name}"
+body: |
+  # Session: {name}
+
+  Date: {date}
+  Request:
+  Inputs read:
+  Candidates considered:
+  Novelty checks:
+  Recommended:
+  Added to playlist:
+  Follow-up memory:

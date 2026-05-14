@@ -1,0 +1,33 @@
+type: artist
+description: Artist-level preference/evidence note
+path:
+  pattern: "artists/{slug(name)}.md"
+frontmatter:
+  required:
+    name: { type: string }
+    stance:
+      type: enum
+      values: [likes, dislikes, curious, unknown, known]
+    tags:
+      type: array
+      items: { type: string }
+  optional:
+    sources:
+      type: array
+      items:
+        type: enum
+        values: [recently-played, saved-tracks, dj-playlist, recommendation, explicit-preference, user-feedback]
+    spotify_id: { type: string }
+search:
+  fields: [name, stance, sources, tags]
+  title: "{name}"
+body: |
+  # Artist: {name}
+
+  Spotify artist id: {spotify_id}
+  User stance: likes / dislikes / curious / unknown / known
+  Sources: recently-played / saved-tracks / dj-playlist / recommendation / explicit-preference / user-feedback
+  Evidence:
+  -
+
+  Related:

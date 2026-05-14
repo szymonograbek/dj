@@ -1,15 +1,17 @@
 # Spotify DJ Harness
 
-Local Node.js CLI tools for Spotify playlist operations, Last.fm taste/history reads, and private markdown-based music memory.
+Local Node.js CLI tools for Spotify playlist operations and Last.fm taste/history reads. The markdown-based music memory system lives in a separate repo and is consumed here via the [`memo`](#memo-cli) CLI, which is required.
 
 ## Components
 
 - `spotify.js` — Spotify OAuth, search, library/playlist reads, write-limited playlist mutation, and optional memory imports.
 - `lastfm.js` — read-only Last.fm profile, history, loved, top, and similar-artist queries.
-- `memory.js` — query and maintain markdown memory notes with YAML frontmatter.
-- `memory-config.js` — shared memory path/config resolution.
-- `memory-backup.js` — git commit + bundle backup helper for memory directories.
 - `SKILL.md` — optional agent integration entrypoint.
+
+## Requirements
+
+- Node.js (the CLIs are plain Node scripts; no `npm install` is needed in this repo).
+- The [`memo`](#memo-cli) CLI, installed and on `PATH`. All memory note querying and maintenance now lives there; this repo only writes through `memo` or via `spotify.js memory sync-known`.
 
 ## Setup
 
@@ -44,13 +46,11 @@ SPOTIFY_CLIENT_ID=...
 LASTFM_API_KEY=...
 LASTFM_USERNAME=...
 MEMORY_DIR=memory
-# Optional; defaults to memory-backup.bundle next to MEMORY_DIR.
-MEMORY_BACKUP_BUNDLE=
 ```
 
 Secrets and local state are gitignored: `.env`, `.spotify-token.json`, and `memory/`.
 
-## Memory storage and backup
+## Memory storage
 
 `MEMORY_DIR` defaults to `memory/`. It can point at any local path, including a synced folder:
 
@@ -60,33 +60,19 @@ cp -a memory/. "/Users/you/Library/Mobile Documents/com~apple~CloudDocs/spotify-
 # set MEMORY_DIR in .env to that path
 ```
 
-If `MEMORY_DIR` is a git repository, mutating memory commands automatically commit changes and update a single-file git bundle backup. Backup can also be run manually:
+## memo CLI
+
+Memory notes are markdown files with YAML frontmatter, managed by the external `memo` CLI (separate repo). It is required for this harness — install it and ensure it is on your `PATH`. Use it to query, validate, and maintain notes:
 
 ```sh
-./memory-backup.js
+memo list --limit 20
+memo query type artist --limit 20
+memo find "chem bros jumpy" --limit 10
+memo recall tracks/roads-portishead.md
+memo validate
 ```
 
-## Memory CLI
-
-Memory notes are markdown files with YAML frontmatter. Common commands:
-
-```sh
-./memory.js list
-./memory.js latest preference 20
-./memory.js query type artist
-./memory.js query stance likes
-./memory.js query tags electronic
-./memory.js values tags
-./memory.js values status track
-./memory.js search "Chemical Brothers"
-./memory.js find "chem bros jumpy"
-
-# Add a new frontmatter field everywhere with a default:
-./memory.js add-field mood unknown
-
-# Or only for one note type:
-./memory.js add-field mood energetic preference
-```
+Refer to the `memo` repo for the full command reference.
 
 Example dated preference note:
 
@@ -103,18 +89,6 @@ decay_days: 45
 tags: [vocals, intense]
 updated: 2026-05-14
 ---
-```
-
-Useful schema discovery and dedupe commands:
-
-```sh
-./memory.js values type
-./memory.js values status
-./memory.js values stance
-./memory.js values tags
-./memory.js find "clairo tired"
-./memory.js query target "Clairo"
-./memory.js query spotify_id <id>
 ```
 
 ## Last.fm CLI
@@ -140,6 +114,8 @@ Supported periods: `overall`, `7day`, `1month`, `3month`, `6month`, `12month`.
 
 ## Spotify CLI
 
+Spotify commands print compact JSON by default to keep agent context small. Search defaults to 5 results; pass an explicit limit when needed.
+
 Read-only commands:
 
 ```sh
@@ -149,7 +125,7 @@ Read-only commands:
 ./spotify.js artist releases "Beach House" 10
 ./spotify.js recently-played 50
 ./spotify.js library find-artist "Maizzle"
-./spotify.js playlist show
+./spotify.js playlist show 50
 ```
 
 Setup/write-limited commands:
