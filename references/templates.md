@@ -40,6 +40,9 @@ updated: 2026-05-14
 Spotify track id:
 Known because: user history / playlist / recommendation / explicit preference
 Status: known / recommended / rejected
+
+Status is only lifecycle/state. Do not write descriptive labels such as `jumpy-fit`, `recommended-for-clubby`, or `lower-priority-for-jumpy` as status; put them in `tags` or `Notes`.
+
 Notes:
 ```
 

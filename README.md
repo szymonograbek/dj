@@ -130,7 +130,7 @@ date +%F
 ./memory.js latest preference 20
 ```
 
-Before creating/updating frontmatter, agents should check existing values to avoid synonym duplicates:
+Before creating/updating frontmatter, agents should check current memory values and reuse them instead of inventing synonyms:
 
 ```sh
 ./memory.js values type
@@ -139,7 +139,7 @@ Before creating/updating frontmatter, agents should check existing values to avo
 ./memory.js values tags
 ```
 
-Use `status` only for a small lifecycle/state enum, not descriptive recommendation labels. If a value reads like `recommended-for-jumpy`, `lower-priority-for-jumpy`, or similar, put that information in `tags` or the note body instead.
+Use `status` only for a small lifecycle/state enum already present in memory, not descriptive recommendation labels. If a value reads like `recommended-for-jumpy`, `lower-priority-for-jumpy`, or similar, put that information in `tags` or the note body instead.
 
 Before creating a new note, agents should dedupe:
 

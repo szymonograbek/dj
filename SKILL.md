@@ -33,8 +33,8 @@ Runtime secrets and local state live in gitignored files in the harness director
 - Never call Spotify write endpoints directly. The CLI restricts writes to `SPOTIFY_DJ_PLAYLIST_ID`.
 - Keep notes factual: source, date, track/artist IDs, user sentiment, and why it matters.
 - Every memory note except `.gitkeep` should have simple YAML frontmatter for `./memory.js` queries.
-- Before creating/updating frontmatter values, check existing values with `./memory.js values <field> [type]` to avoid synonym duplicates, especially for `type`, `status`, `stance`, `target_type`, `strength`, and `tags`.
-- Use `status` only for compact lifecycle/state values such as `known`, `recommended`, or `rejected`. Do not encode recommendation reasons in `status`; use `tags` or the note body for labels like `jumpy-fit` or `lower-priority-for-jumpy`.
+- Before creating/updating frontmatter values, check current memory values with `./memory.js values <field> [type]`; prefer existing values over inventing new synonyms. This is required for `type`, `status`, `stance`, `target_type`, `strength`, and `tags`.
+- Use `status` only for compact lifecycle/state values already present in memory, such as `known`, `recommended`, or `rejected`. Do not encode recommendation reasons in `status`; use `tags` or the note body for labels like `jumpy-fit` or `lower-priority-for-jumpy`.
 - When adding a new frontmatter field globally, use `./memory.js add-field <field> <default> [type]` instead of hand-editing every note.
 - Treat user feedback on recommendations as memory-worthy by default; save it unless the user explicitly says not to.
 
@@ -101,7 +101,7 @@ Before answering a recommendation request:
    - `./memory.js query spotify_id <id>` when a Spotify ID exists
    - `./memory.js query target "<target>"` for preference targets
 7. Prefer updating an existing note when it represents the same artist, track, album, preference target, or session. Create a new dated preference only when the user's current stance has changed or the old note is no longer the same fact.
-8. Before writing/updating note frontmatter, run `./memory.js values <field> [type]` for any field whose value you are choosing rather than copying.
+8. Before writing/updating note frontmatter, run `./memory.js values <field> [type]` for any field whose value you are choosing rather than copying. Reuse current values unless there is a clear reason to introduce a new one.
 9. Write/update notes under `MEMORY_DIR`:
    - `index.md` links important notes. This should be the only top-level note.
    - `artists/<artist-slug>.md` for artist-level preference.
