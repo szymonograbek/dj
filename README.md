@@ -154,6 +154,12 @@ Setup/write-limited commands:
 ```sh
 ./spotify.js playlist init
 ./spotify.js playlist add <track_id_or_uri> [more...]
+./spotify.js playlist clear
+./spotify.js playlist play [position]       # 1-based playlist position, defaults to 1
+./spotify.js playback play-track <track_id_or_uri>
+./spotify.js playback pause
+./spotify.js playback next
+./spotify.js playback previous
 ```
 
 Optional manual memory import. These commands create missing known-track notes and do not overwrite existing files:

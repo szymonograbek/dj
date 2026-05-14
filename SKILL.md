@@ -29,7 +29,7 @@ Runtime secrets and local state live in gitignored files in the harness director
 - Use zettelkasten notes: one idea per markdown file, linked with `[[note-id]]`.
 - Never recommend tracks already known from memory or the exposed playlist unless the user asks.
 - Use `./lastfm.js` for read-only Last.fm taste/listening-history signals when available.
-- Only mutate Spotify through `./spotify.js playlist add ...` or setup commands explicitly requested by the user.
+- Only mutate Spotify through `./spotify.js playlist add ...`, `./spotify.js playlist clear`, `./spotify.js playlist play ...`, `./spotify.js playback ...`, or setup commands explicitly requested by the user.
 - Never call Spotify write endpoints directly. The CLI restricts writes to `SPOTIFY_DJ_PLAYLIST_ID`.
 - Keep notes factual: source, date, track/artist IDs, user sentiment, and why it matters.
 - Every memory note except `.gitkeep` should have simple YAML frontmatter for `./memory.js` queries.
@@ -84,6 +84,12 @@ Use Last.fm for what the user actually listens to; use Spotify for search, metad
 ```sh
 ./spotify.js playlist init          # setup only; creates/reuses the one DJ playlist
 ./spotify.js playlist add <track_id_or_uri> [more_ids_or_uris...]
+./spotify.js playlist clear
+./spotify.js playlist play [position]       # 1-based playlist position, defaults to 1
+./spotify.js playback play-track <track_id_or_uri>
+./spotify.js playback pause
+./spotify.js playback next
+./spotify.js playback previous
 ```
 
 `playlist add` always targets only `SPOTIFY_DJ_PLAYLIST_ID` from `.env`.
@@ -97,6 +103,7 @@ Before answering a recommendation request:
 3. Query read-only Spotify and Last.fm data as needed.
 4. Build candidates and filter out known tracks/artists where appropriate.
 5. Add selected tracks to the exposed playlist only if the user asked for a playlist.
+   If the user asks for new songs and wants playback, start the DJ playlist from the first newly added song unless they specify another position.
 6. Before creating a new note, run duplicate checks:
    - `./memory.js find "<artist/track/preference/session keywords>"`
    - `./memory.js query spotify_id <id>` when a Spotify ID exists

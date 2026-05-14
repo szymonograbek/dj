@@ -91,7 +91,7 @@ async function login() {
   const verifier = base64url(randomBytes(64));
   const challenge = base64url(createHash('sha256').update(verifier).digest());
   const state = base64url(randomBytes(16));
-  const scopes = ['playlist-modify-private', 'playlist-read-private', 'user-read-recently-played', 'user-library-read', 'user-top-read'];
+  const scopes = ['playlist-modify-private', 'playlist-read-private', 'user-read-recently-played', 'user-library-read', 'user-top-read', 'user-modify-playback-state', 'user-read-playback-state'];
   const authUrl = new URL(`${ACCOUNTS}/authorize`);
   authUrl.search = new URLSearchParams({ client_id, response_type: 'code', redirect_uri, code_challenge_method: 'S256', code_challenge: challenge, state, scope: scopes.join(' ') });
   console.error(`Open this URL:\n${authUrl.toString()}\n`);
@@ -151,6 +151,26 @@ async function djPlaylistTracks() {
   if (!env.SPOTIFY_DJ_PLAYLIST_ID) return [];
   const playlist = await paged(`/playlists/${encodeURIComponent(env.SPOTIFY_DJ_PLAYLIST_ID)}/tracks?limit=50`, 1000);
   return playlist.map((item) => ({ track: item.track, source: 'dj-playlist' })).filter((item) => item.track);
+}
+
+async function clearDjPlaylist() {
+  const id = requireEnv('SPOTIFY_DJ_PLAYLIST_ID');
+  return api('PUT', `/playlists/${encodeURIComponent(id)}/tracks`, { uris: [] });
+}
+
+function parseOneBasedPosition(value) {
+  const position = Number.parseInt(value || '1', 10);
+  if (!Number.isInteger(position) || position < 1) throw new Error('Position must be a positive number');
+  return position - 1;
+}
+
+async function playDjPlaylist(positionValue) {
+  const id = requireEnv('SPOTIFY_DJ_PLAYLIST_ID');
+  return api('PUT', '/me/player/play', { context_uri: `spotify:playlist:${id}`, offset: { position: parseOneBasedPosition(positionValue) } });
+}
+
+async function playTrack(value) {
+  return api('PUT', '/me/player/play', { uris: [trackUri(value)] });
 }
 
 async function savedTracks() {
@@ -314,6 +334,25 @@ async function main() {
     const id = requireEnv('SPOTIFY_DJ_PLAYLIST_ID');
     return console.log(JSON.stringify(await api('POST', `/playlists/${encodeURIComponent(id)}/items`, { uris: args.map(trackUri) }), null, 2));
   }
+  if (group === 'playlist' && cmd === 'clear') {
+    return console.log(JSON.stringify(await clearDjPlaylist(), null, 2));
+  }
+  if (group === 'playlist' && cmd === 'play') {
+    return console.log(JSON.stringify(await playDjPlaylist(args[0] || '1'), null, 2));
+  }
+  if (group === 'playback' && cmd === 'play-track') {
+    if (!args[0]) throw new Error('Usage: ./spotify.js playback play-track <track_id_or_uri>');
+    return console.log(JSON.stringify(await playTrack(args[0]), null, 2));
+  }
+  if (group === 'playback' && cmd === 'pause') {
+    return console.log(JSON.stringify(await api('PUT', '/me/player/pause'), null, 2));
+  }
+  if (group === 'playback' && cmd === 'next') {
+    return console.log(JSON.stringify(await api('POST', '/me/player/next'), null, 2));
+  }
+  if (group === 'playback' && cmd === 'previous') {
+    return console.log(JSON.stringify(await api('POST', '/me/player/previous'), null, 2));
+  }
   throw new Error(`Usage:
   ./spotify.js auth login
   ./spotify.js me
@@ -324,7 +363,13 @@ async function main() {
   ./spotify.js memory sync-known <recent|playlist|saved|all>
   ./spotify.js playlist init
   ./spotify.js playlist show
-  ./spotify.js playlist add <track_id_or_uri> [more...]`);
+  ./spotify.js playlist add <track_id_or_uri> [more...]
+  ./spotify.js playlist clear
+  ./spotify.js playlist play [position]
+  ./spotify.js playback play-track <track_id_or_uri>
+  ./spotify.js playback pause
+  ./spotify.js playback next
+  ./spotify.js playback previous`);
 }
 
 main().catch((error) => {
