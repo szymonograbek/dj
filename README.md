@@ -1,92 +1,74 @@
 # Spotify DJ Harness
 
-Local agent skill + CLI for a Spotify/Last.fm-connected DJ with private markdown memory.
+Local Node.js CLI tools for Spotify playlist operations, Last.fm taste/history reads, and private markdown-based music memory.
+
+## Components
+
+- `spotify.js` — Spotify OAuth, search, library/playlist reads, write-limited playlist mutation, and optional memory imports.
+- `lastfm.js` — read-only Last.fm profile, history, loved, top, and similar-artist queries.
+- `memory.js` — query and maintain markdown memory notes with YAML frontmatter.
+- `memory-config.js` — shared memory path/config resolution.
+- `memory-backup.js` — git commit + bundle backup helper for memory directories.
+- `SKILL.md` — optional agent integration entrypoint.
 
 ## Setup
 
-Get a Spotify Client ID:
-
-1. Open <https://developer.spotify.com/dashboard>.
-2. Log in and click **Create app**.
-3. Use any app name/description, e.g. `Local Spotify DJ`.
-4. Add this Redirect URI exactly:
+Create a Spotify app at <https://developer.spotify.com/dashboard> with this redirect URI:
 
 ```text
 http://127.0.0.1:8888/callback
 ```
 
-5. Save the app, then copy **Client ID** from the app settings.
-
 Then configure and authenticate:
 
 ```sh
 cp .env.example .env
-# paste the Client ID into SPOTIFY_CLIENT_ID in .env
+# set SPOTIFY_CLIENT_ID in .env
 ./spotify.js auth login
 ./spotify.js playlist init
 ```
 
-Optional Last.fm setup for listening-history/taste reads:
-
-1. Create an API account at <https://www.last.fm/api/account/create>.
-2. Paste the API key and username into `.env`:
+Optional Last.fm configuration:
 
 ```env
 LASTFM_API_KEY=...
 LASTFM_USERNAME=...
 ```
 
-## Agent usage
+## Configuration
 
-Install the skill globally by symlinking this repo into the agent skills directory, and point `SPOTIFY_DJ_HOME` at the harness repo:
-
-```sh
-mkdir -p ~/.agents/skills
-ln -sfn "$(pwd)" ~/.agents/skills/spotify-dj
-export SPOTIFY_DJ_HOME="$(pwd)"
-```
-
-Persist `SPOTIFY_DJ_HOME` in your shell profile (`~/.zshrc`, `~/.bashrc`, etc.). The symlink keeps the canonical source in this repo so `SKILL.md`, scripts, and references stay syncable with GitHub. Agents use `SPOTIFY_DJ_HOME` as the script working directory.
-
-The agent keeps private zettelkasten notes in `MEMORY_DIR` (`memory/` by default) and only mutates Spotify through:
-
-```sh
-./spotify.js playlist add <track_id_or_uri> [more...]
-```
-
-## Private memory location and backup
-
-Memory is configured with `.env`:
+`.env` supports:
 
 ```env
+SPOTIFY_CLIENT_ID=...
+LASTFM_API_KEY=...
+LASTFM_USERNAME=...
 MEMORY_DIR=memory
-# Example iCloud path:
-# MEMORY_DIR=/Users/you/Library/Mobile Documents/com~apple~CloudDocs/spotify-dj-memory
 # Optional; defaults to memory-backup.bundle next to MEMORY_DIR.
 MEMORY_BACKUP_BUNDLE=
 ```
 
-To move memory to iCloud while keeping this repo publishable:
+Secrets and local state are gitignored: `.env`, `.spotify-token.json`, and `memory/`.
+
+## Memory storage and backup
+
+`MEMORY_DIR` defaults to `memory/`. It can point at any local path, including a synced folder:
 
 ```sh
 mkdir -p "/Users/you/Library/Mobile Documents/com~apple~CloudDocs/spotify-dj-memory"
 cp -a memory/. "/Users/you/Library/Mobile Documents/com~apple~CloudDocs/spotify-dj-memory/"
-# set MEMORY_DIR in .env to that iCloud path
-cd "/Users/you/Library/Mobile Documents/com~apple~CloudDocs/spotify-dj-memory"
-git init
-git add .
-git commit -m "Initial memory backup"
+# set MEMORY_DIR in .env to that path
 ```
 
-Mutating memory commands automatically commit changes when `MEMORY_DIR` is a git repo and update a single-file git bundle backup. You can also run:
+If `MEMORY_DIR` is a git repository, mutating memory commands automatically commit changes and update a single-file git bundle backup. Backup can also be run manually:
 
 ```sh
 ./memory-backup.js
 ```
 
-## Memory query CLI
+## Memory CLI
 
-Memory notes use simple YAML frontmatter so agents can query before reading full files:
+Memory notes are markdown files with YAML frontmatter. Common commands:
 
 ```sh
 ./memory.js list
@@ -106,7 +88,7 @@ Memory notes use simple YAML frontmatter so agents can query before reading full
 ./memory.js add-field mood energetic preference
 ```
 
-Time-sensitive preferences should be dated notes in `memory/preferences/`, not overwrites:
+Example dated preference note:
 
 ```md
 ---
@@ -123,27 +105,13 @@ updated: 2026-05-14
 ---
 ```
 
-Agents should check latest preferences first and use the real current date:
-
-```sh
-date +%F
-./memory.js latest preference 20
-```
-
-Before creating/updating frontmatter, agents should check current memory values and reuse them instead of inventing synonyms:
+Useful schema discovery and dedupe commands:
 
 ```sh
 ./memory.js values type
 ./memory.js values status
 ./memory.js values stance
 ./memory.js values tags
-```
-
-Use `status` only for a small lifecycle/state enum already present in memory, not descriptive recommendation labels. If a value reads like `recommended-for-jumpy`, `lower-priority-for-jumpy`, or similar, put that information in `tags` or the note body instead.
-
-Before creating a new note, agents should dedupe:
-
-```sh
 ./memory.js find "clairo tired"
 ./memory.js query target "Clairo"
 ./memory.js query spotify_id <id>
@@ -169,9 +137,7 @@ Supported periods: `overall`, `7day`, `1month`, `3month`, `6month`, `12month`.
 
 ## Spotify CLI
 
-Read-only:
-
-Spotify search syntax is exactly `./spotify.js search <track|artist|album> "<query>" [limit]`.
+Read-only commands:
 
 ```sh
 ./spotify.js me
@@ -183,14 +149,14 @@ Spotify search syntax is exactly `./spotify.js search <track|artist|album> "<que
 ./spotify.js playlist show
 ```
 
-Setup/write-limited:
+Setup/write-limited commands:
 
 ```sh
 ./spotify.js playlist init
-./spotify.js playlist add <track_id_or_uri>
+./spotify.js playlist add <track_id_or_uri> [more...]
 ```
 
-Optional manual memory import. This creates missing known-track notes and never overwrites existing files:
+Optional manual memory import. These commands create missing known-track notes and do not overwrite existing files:
 
 ```sh
 ./spotify.js memory sync-known recent    # last 50 recent plays
@@ -198,5 +164,3 @@ Optional manual memory import. This creates missing known-track notes and never 
 ./spotify.js memory sync-known saved     # saved tracks, can create many files
 ./spotify.js memory sync-known all       # recent + playlist + saved
 ```
-
-Secrets and local memory are gitignored: `.env`, `.spotify-token.json`, `memory/`.
