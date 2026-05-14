@@ -106,7 +106,7 @@ function fuzzyScore(haystack, needle) {
 }
 
 function searchable(note) {
-  return [note.path, ...Object.values(note.frontmatter).flat().map(String)].join(' ');
+  return [note.path, note.text, ...Object.values(note.frontmatter).flat().map(String)].join(' ');
 }
 
 function noteTime(note) {

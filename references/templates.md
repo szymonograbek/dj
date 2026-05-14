@@ -43,6 +43,8 @@ Status: known / recommended / rejected
 
 Status is only lifecycle/state. Do not write descriptive labels such as `jumpy-fit`, `recommended-for-clubby`, or `lower-priority-for-jumpy` as status; put them in `tags` or `Notes`.
 
+Tags describe the track itself, not the request/session context. If feedback says this track was not jumpy enough, do not tag it `jumpy`; write that mismatch in Notes or a preference note.
+
 Notes:
 ```
 

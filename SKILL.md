@@ -35,6 +35,7 @@ Runtime secrets and local state live in gitignored files in the harness director
 - Every memory note except `.gitkeep` should have simple YAML frontmatter for `./memory.js` queries.
 - Before creating/updating frontmatter values, check current memory values with `./memory.js values <field> [type]`; prefer existing values over inventing new synonyms. This is required for `type`, `status`, `stance`, `target_type`, `strength`, and `tags`.
 - Use `status` only for compact lifecycle/state values already present in memory, such as `known`, `recommended`, or `rejected`. Do not encode recommendation reasons in `status`; use `tags` or the note body for labels like `jumpy-fit` or `lower-priority-for-jumpy`.
+- Tags must describe the note target itself, not the request/session context. If feedback says a track was *not* jumpy, do not tag the track `jumpy`; record the mismatch in the note body and/or a preference note instead.
 - When adding a new frontmatter field globally, use `./memory.js add-field <field> <default> [type]` instead of hand-editing every note.
 - Treat user feedback on recommendations as memory-worthy by default; save it unless the user explicitly says not to.
 
@@ -102,13 +103,19 @@ Before answering a recommendation request:
    - `./memory.js query target "<target>"` for preference targets
 7. Prefer updating an existing note when it represents the same artist, track, album, preference target, or session. Create a new dated preference only when the user's current stance has changed or the old note is no longer the same fact.
 8. Before writing/updating note frontmatter, run `./memory.js values <field> [type]` for any field whose value you are choosing rather than copying. Reuse current values unless there is a clear reason to introduce a new one.
-9. Write/update notes under `MEMORY_DIR`:
+9. For tags, separate intrinsic qualities from feedback context:
+   - Track/artist tags should be true of that track/artist (`electronic`, `big-beat`, `distorted`).
+   - Mood/fit tags such as `jumpy` only belong on a track when the user or evidence says the track actually fits that mood.
+   - Negative fit belongs in notes/preference guidance, e.g. "too repetitive for jumpy mood", not as a positive `jumpy` tag.
+   - `feedback` is usually a session/body concept; avoid using it as a track tag unless existing memory clearly uses it that way.
+10. Write/update notes under `MEMORY_DIR`:
+
    - `index.md` links important notes. This should be the only top-level note.
    - `artists/<artist-slug>.md` for artist-level preference.
    - `tracks/<track-id>.md` for known tracks.
    - `preferences/<YYYY-MM-DD>-<preference-slug>.md` for time-sensitive or durable moods, genre tastes, artist fatigue, voice preferences, and recommendation heuristics.
    - `sessions/<YYYY-MM-DD>-<slug>.md` for interactions and one-off context.
-10. After any manual create/update/delete of memory `.md` files, immediately run `./memory-backup.js` so the private memory git repo and bundle are updated. Do this before replying to the user.
+11. After any manual create/update/delete of memory `.md` files, immediately run `./memory-backup.js` so the private memory git repo and bundle are updated. Do this before replying to the user.
 
 ## Time-sensitive preferences
 
