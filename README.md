@@ -131,6 +131,9 @@ Read-only taste/history helpers:
 ./lastfm.js find-track "Charli XCX"
 ./lastfm.js artist "Burial"
 ./lastfm.js similar "Burial" 20
+./lastfm.js similar-track "Burial - Archangel" 20
+./lastfm.js recommend artists 1month 30   # similar artists from your top artists
+./lastfm.js recommend tracks 1month 30    # similar tracks from your top tracks
 ```
 
 Supported periods: `overall`, `7day`, `1month`, `3month`, `6month`, `12month`.
@@ -162,7 +165,8 @@ Setup/write-limited commands:
 ./spotify.js playback previous
 ```
 
-Optional manual memory import. These commands create missing known-track notes and do not overwrite existing files:
+Optional manual memory import. These commands create missing known-track notes and artist notes using portable filenames such as `tracks/roads-portishead.md` and `artists/portishead.md`; existing notes are deduped by provider IDs in frontmatter and are not overwritten.
+When a recommendation or import references an artist, also create `artists/<artist-name-slug>.md` if it is missing, linking the evidence from the relevant track/session notes. Use portable human slugs for artist and track filenames, and keep provider IDs such as Spotify IDs in frontmatter:
 
 ```sh
 ./spotify.js memory sync-known recent    # last 50 recent plays

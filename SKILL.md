@@ -28,11 +28,15 @@ Runtime secrets and local state live in gitignored files in the harness director
 - Before writing dated notes, get today's date with `date +%F`; do not guess the date.
 - Use zettelkasten notes: one idea per markdown file, linked with `[[note-id]]`.
 - Never recommend tracks already known from memory or the exposed playlist unless the user asks.
+- Treat Spotify “Liked Songs” precisely: only `saved-tracks` / `/me/tracks` means liked/saved on Spotify. DJ playlist membership, recommendations, and playback do not mean Spotify-liked.
 - Use `./lastfm.js` for read-only Last.fm taste/listening-history signals when available.
+- When looking for *new* music to recommend (discovery, not catalog lookup or playlist mutation), also use web search if available to surface human-curated picks. Useful query shapes: `"similar to <artist> reddit"`, `"music like <track> reddit"`, `"<genre> classics"`, `"best <mood/era/scene> tracks"`. Skip web search for feedback handling, memory updates, or when the user already named specific tracks/artists.
 - Only mutate Spotify through `./spotify.js playlist add ...`, `./spotify.js playlist clear`, `./spotify.js playlist play ...`, `./spotify.js playback ...`, or setup commands explicitly requested by the user.
 - Never call Spotify write endpoints directly. The CLI restricts writes to `SPOTIFY_DJ_PLAYLIST_ID`.
 - Keep notes factual: source, date, track/artist IDs, user sentiment, and why it matters.
+- Track and artist notes should include `sources` frontmatter. For agent-made recommendations, include `recommendation`; add `user-feedback` or `explicit-preference` when applicable. Spotify sync uses `recently-played`, `saved-tracks`, and `dj-playlist`.
 - Every memory note except `.gitkeep` should have simple YAML frontmatter for `./memory.js` queries.
+- Make important connections queryable in frontmatter, not only wiki links in the body. Use portable slugs in `related_tracks`, `related_artists`, `related_preferences`, and `related_sessions`; use Spotify IDs in `spotify_ids` when a session references tracks.
 - Before creating/updating frontmatter values, check current memory values with `./memory.js values <field> [type]`; prefer existing values over inventing new synonyms. This is required for `type`, `status`, `stance`, `target_type`, `strength`, and `tags`.
 - Use `status` only for compact lifecycle/state values already present in memory, such as `known`, `recommended`, or `rejected`. Do not encode recommendation reasons in `status`; use `tags` or the note body for labels like `jumpy-fit` or `lower-priority-for-jumpy`.
 - Tags must describe the note target itself, not the request/session context. If feedback says a track was *not* jumpy, do not tag the track `jumpy`; record the mismatch in the note body and/or a preference note instead.
@@ -73,11 +77,14 @@ Spotify search syntax is exactly `./spotify.js search <track|artist|album> "<que
 ./lastfm.js find-track "artist or track"
 ./lastfm.js artist "Burial"
 ./lastfm.js similar "Burial" 20
+./lastfm.js similar-track "Burial - Archangel" 20
+./lastfm.js recommend artists 1month 30
+./lastfm.js recommend tracks 1month 30
 ```
 
 Periods: `overall`, `7day`, `1month`, `3month`, `6month`, `12month`.
 
-Use Last.fm for what the user actually listens to; use Spotify for search, metadata, and playlist mutation.
+Use `recommend artists` for similar artists seeded from Last.fm top artists, and `recommend tracks` for similar tracks seeded from Last.fm top tracks. Use Last.fm for what the user actually listens to; use Spotify for search, metadata, and playlist mutation.
 
 ## Only writable playlist commands
 
@@ -98,18 +105,20 @@ Use Last.fm for what the user actually listens to; use Spotify for search, metad
 
 Before answering a recommendation request:
 
-1. Query memory first with `./memory.js latest preference 20`, `./memory.js query <field> <value>`, `./memory.js values <field> [type]`, `./memory.js search <text>`, or fuzzy `./memory.js find <text>`.
+1. Query memory first with `./memory.js latest preference 20`, `./memory.js query <field> <value>`, `./memory.js values <field> [type]`, `./memory.js search <text>`, or fuzzy `./memory.js find <text>`. For connections, query relation fields, e.g. `./memory.js query related_artists beach-house`, `./memory.js query related_preferences dream-pop`, or `./memory.js query spotify_ids <id>`.
 2. Read the relevant note files returned by `memory.js`.
 3. Query read-only Spotify and Last.fm data as needed.
-4. Build candidates and filter out known tracks/artists where appropriate.
-5. Add selected tracks to the exposed playlist only if the user asked for a playlist.
+4. Build candidates and filter out known tracks/artists where appropriate. For each named candidate, check memory by candidate name before Spotify search/add: `./memory.js find "<artist> <track>"` and, when avoiding already-known artists, `./spotify.js library find-artist "<artist>"`. Also check the final Spotify ID with `./memory.js query spotify_id <id>` after search.
+5. Add selected tracks to the exposed playlist only if the user asked for a playlist. Do not describe added tracks as “liked on Spotify” unless their source is `saved-tracks`.
    If the user asks for new songs and wants playback, start the DJ playlist from the first newly added song unless they specify another position.
 6. Before creating a new note, run duplicate checks:
    - `./memory.js find "<artist/track/preference/session keywords>"`
+   - `./memory.js find "<artist> <track>"` for every concrete recommendation candidate before Spotify search/add
    - `./memory.js query spotify_id <id>` when a Spotify ID exists
+   - `./memory.js query sources saved-tracks` or `./spotify.js library find-artist "<artist>"` when the user asks whether something is Spotify-liked/known
    - `./memory.js query target "<target>"` for preference targets
 7. Prefer updating an existing note when it represents the same artist, track, album, preference target, or session. Create a new dated preference only when the user's current stance has changed or the old note is no longer the same fact.
-8. Before writing/updating note frontmatter, run `./memory.js values <field> [type]` for any field whose value you are choosing rather than copying. Reuse current values unless there is a clear reason to introduce a new one.
+8. Before writing/updating note frontmatter, run `./memory.js values <field> [type]` for any field whose value you are choosing rather than copying. Reuse current values unless there is a clear reason to introduce a new one. For recommended track notes, set `sources: [recommendation]` unless additional evidence applies.
 9. For tags, separate intrinsic qualities from feedback context:
    - Track/artist tags should be true of that track/artist (`electronic`, `big-beat`, `distorted`).
    - Mood/fit tags such as `jumpy` only belong on a track when the user or evidence says the track actually fits that mood.
@@ -118,10 +127,11 @@ Before answering a recommendation request:
 10. Write/update notes under `MEMORY_DIR`:
 
    - `index.md` links important notes. This should be the only top-level note.
-   - `artists/<artist-slug>.md` for artist-level preference.
-   - `tracks/<track-id>.md` for known tracks.
+   - `artists/<artist-name-slug>.md` for artist-level preference or artist evidence. If a recommended/known track references an artist and this file is missing, create it with the known stance/evidence instead of leaving the artist only embedded in track/session notes. Include `related_tracks`, `related_preferences`, and `related_sessions` when known.
+   - `tracks/<track-title>-<primary-artist>.md` for known tracks. Include `related_artists`, `related_preferences`, and `related_sessions` when known.
+   - Use portable human slugs for entity filenames; keep provider IDs such as `spotify_id`, Tidal IDs, MusicBrainz IDs, or ISRCs in frontmatter/body. Do not use Spotify IDs as primary filenames for new notes.
    - `preferences/<YYYY-MM-DD>-<preference-slug>.md` for time-sensitive or durable moods, genre tastes, artist fatigue, voice preferences, and recommendation heuristics.
-   - `sessions/<YYYY-MM-DD>-<slug>.md` for interactions and one-off context.
+   - `sessions/<YYYY-MM-DD>-<slug>.md` for interactions and one-off context. Include queryable `status`, `tracks`, `spotify_ids`, `related_artists`, and `related_preferences` when applicable.
 11. After any manual create/update/delete of memory `.md` files, immediately run `./memory-backup.js` so the private memory git repo and bundle are updated. Do this before replying to the user.
 
 ## Time-sensitive preferences

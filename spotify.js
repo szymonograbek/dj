@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 const http = require('node:http');
-const { existsSync, mkdirSync, readFileSync, writeFileSync } = require('node:fs');
+const { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } = require('node:fs');
 const { randomBytes, createHash } = require('node:crypto');
 const { URL, URLSearchParams } = require('node:url');
 const { join } = require('node:path');
@@ -79,9 +79,12 @@ async function api(method, path, body) {
     headers: { authorization: `Bearer ${await token()}`, 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  const text = await res.text();
-  const json = text ? JSON.parse(text) : null;
-  if (!res.ok) throw new Error(JSON.stringify(json));
+  const responseText = await res.text();
+  const json = responseText ? JSON.parse(responseText) : null;
+  if (!res.ok) {
+    const detail = responseText || res.statusText || 'empty response body';
+    throw new Error(`Spotify API ${method} ${path} failed: ${res.status} ${detail}`);
+  }
   return json;
 }
 
@@ -124,6 +127,7 @@ function trackUri(value) {
   if (/^[A-Za-z0-9]{22}$/.test(value)) return `spotify:track:${value}`;
   throw new Error(`Not a Spotify track id/uri: ${value}`);
 }
+
 
 function artistMatches(artists, query) {
   const needle = query.toLowerCase();
@@ -183,6 +187,7 @@ async function searchArtists(query, limit = '1') {
   return result.artists?.items || [];
 }
 
+
 async function artistReleases(query, limit = '10') {
   const artists = await searchArtists(query, '1');
   const artist = artists[0];
@@ -237,6 +242,71 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function slugPart(value) {
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'unknown';
+}
+
+function portableTrackSlug(track) {
+  const primaryArtist = track.artists[0]?.name || 'unknown-artist';
+  return `${slugPart(track.name)}-${slugPart(primaryArtist)}`;
+}
+
+function portableArtistSlug(artist) {
+  return slugPart(artist.name);
+}
+
+function uniquePath(dir, basename) {
+  let path = join(dir, `${basename}.md`);
+  let suffix = 2;
+  while (existsSync(path)) {
+    path = join(dir, `${basename}-${suffix}.md`);
+    suffix += 1;
+  }
+  return path;
+}
+
+function parseSpotifyId(text) {
+  const match = text.match(/^spotify_id:\s*(\S+)\s*$/m);
+  return match ? match[1] : '';
+}
+
+function existingSpotifyIds(dir) {
+  if (!existsSync(dir)) return new Map();
+  const ids = new Map();
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith('.md')) continue;
+    const path = join(dir, name);
+    const id = parseSpotifyId(readFileSync(path, 'utf8'));
+    if (id) ids.set(id, path);
+  }
+  return ids;
+}
+
+function artistNote(artist, source) {
+  return `---
+type: artist
+name: ${artist.name}
+spotify_id: ${artist.id || ''}
+stance: known
+tags: []
+updated: ${today()}
+---
+
+# Artist: ${artist.name}
+
+Spotify artist id: ${artist.id || ''}
+User stance: known
+Evidence:
+- ${today()}: Referenced by imported Spotify track from ${source}.
+`;
+}
+
 function trackNote(track, sources) {
   const artists = track.artists.map((artist) => artist.name);
   return `---
@@ -270,6 +340,7 @@ async function syncKnownTracks(scope) {
 
   const root = memoryDir();
   mkdirSync(join(root, 'tracks'), { recursive: true });
+  mkdirSync(join(root, 'artists'), { recursive: true });
   const byId = new Map();
   for (const item of groups) {
     if (!item.track.id) continue;
@@ -280,14 +351,26 @@ async function syncKnownTracks(scope) {
 
   const created = [];
   const skipped = [];
+  const trackIds = existingSpotifyIds(join(root, 'tracks'));
+  const artistIds = existingSpotifyIds(join(root, 'artists'));
   for (const [id, item] of byId.entries()) {
-    const path = join(root, 'tracks', `${id}.md`);
-    if (existsSync(path)) {
-      skipped.push(path);
-      continue;
+    const existing = trackIds.get(id);
+    if (existing) {
+      skipped.push(existing);
+    } else {
+      const path = uniquePath(join(root, 'tracks'), portableTrackSlug(item.track));
+      writeFileSync(path, trackNote(item.track, item.sources));
+      trackIds.set(id, path);
+      created.push(path);
     }
-    writeFileSync(path, trackNote(item.track, item.sources));
-    created.push(path);
+
+    for (const artist of item.track.artists || []) {
+      if (!artist.id || artistIds.has(artist.id)) continue;
+      const path = uniquePath(join(root, 'artists'), portableArtistSlug(artist));
+      writeFileSync(path, artistNote(artist, Array.from(item.sources).join(', ')));
+      artistIds.set(artist.id, path);
+      created.push(path);
+    }
   }
   const backup = created.length === 0 ? { backedUp: false, reason: 'no changes' } : backupMemory('Spotify memory sync backup');
   return { scope, created, skipped, backup };

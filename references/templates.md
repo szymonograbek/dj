@@ -8,14 +8,19 @@ type: artist
 name: Beach House
 spotify_id:
 stance: likes
+sources: [explicit-preference]
 tags: [dream-pop, indie]
+related_tracks: [space-song-beach-house]
+related_preferences: [dream-pop]
+related_sessions: [2026-05-14-beach-house-similar]
 updated: 2026-05-14
 ---
 
 # Artist: Beach House
 
 Spotify artist id:
-User stance: likes / dislikes / curious / unknown
+User stance: likes / dislikes / curious / unknown / known
+Sources: recently-played / saved-tracks / dj-playlist / recommendation / explicit-preference / user-feedback
 Evidence:
 - 2026-05-14: User said they like Beach House.
 
@@ -31,7 +36,11 @@ name: Space Song
 artists: [Beach House]
 spotify_id:
 status: known
+sources: [recommendation]
 tags: [dream-pop]
+related_artists: [beach-house]
+related_preferences: [dream-pop]
+related_sessions: [2026-05-14-beach-house-similar]
 updated: 2026-05-14
 ---
 
@@ -39,7 +48,10 @@ updated: 2026-05-14
 
 Spotify track id:
 Known because: user history / playlist / recommendation / explicit preference
+Sources: recently-played / saved-tracks / dj-playlist / recommendation / explicit-preference / user-feedback
 Status: known / recommended / rejected
+
+`sources` records evidence origin. `saved-tracks` means Spotify Liked/Saved Songs. `dj-playlist` only means queued/added to the DJ playlist. For agent-made recommendations, include `recommendation`; add `user-feedback` or `explicit-preference` when applicable.
 
 Status is only lifecycle/state. Do not write descriptive labels such as `jumpy-fit`, `recommended-for-clubby`, or `lower-priority-for-jumpy` as status; put them in `tags` or `Notes`.
 
@@ -55,7 +67,12 @@ Notes:
 type: session
 name: Beach House similar recommendations
 date: 2026-05-14
+status: recommended
 tags: [dream-pop, recommendations]
+tracks: [space-song-beach-house]
+spotify_ids: []
+related_artists: [beach-house]
+related_preferences: [dream-pop]
 updated: 2026-05-14
 ---
 
@@ -65,6 +82,8 @@ Date: 2026-05-14
 Request: "I like Beach House can you propose something similar to me"
 Inputs read:
 Candidates considered:
+Novelty checks:
+Recommended:
 Added to playlist:
 Follow-up memory:
 ```
@@ -82,6 +101,9 @@ strength: medium
 valid_from: 2026-05-14
 decay_days: 30
 tags: [artist-fatigue, indie-pop]
+related_artists: [clairo]
+related_tracks: []
+related_sessions: []
 updated: 2026-05-14
 ---
 
@@ -107,6 +129,9 @@ strength: medium
 valid_from: 2026-05-14
 decay_days: 45
 tags: [vocals, intense]
+related_artists: []
+related_tracks: []
+related_sessions: []
 updated: 2026-05-14
 ---
 

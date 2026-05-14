@@ -61,6 +61,57 @@ function trackKey(track) {
   return `${artist} ${track.name || ''}`.toLowerCase();
 }
 
+function trackArtist(track) {
+  return text(track.artist?.name ? track.artist.name : track.artist);
+}
+
+function compactSimilarArtist(item, source) {
+  return {
+    source,
+    name: item.name,
+    match: item.match,
+    url: item.url,
+  };
+}
+
+function compactSimilarTrack(item, source) {
+  return {
+    source,
+    name: item.name,
+    artist: trackArtist(item),
+    match: item.match,
+    url: item.url,
+  };
+}
+
+async function recommendFromTopArtists(periodValue, limitValue) {
+  const period = cleanPeriod(periodValue, '1month');
+  const limit = Number(cleanLimit(limitValue, '30'));
+  const seedLimit = String(Math.min(10, limit));
+  const top = await api({ method: 'user.getTopArtists', user: username(), period, limit: seedLimit });
+  const results = [];
+  for (const artist of top.topartists?.artist || []) {
+    const similar = await api({ method: 'artist.getSimilar', artist: artist.name, limit: '5', autocorrect: '1' });
+    for (const item of similar.similarartists?.artist || []) results.push(compactSimilarArtist(item, `top-artist:${artist.name}`));
+  }
+  return { basis: 'lastfm-top-artists', period, recommendations: results.slice(0, limit) };
+}
+
+async function recommendFromTopTracks(periodValue, limitValue) {
+  const period = cleanPeriod(periodValue, '1month');
+  const limit = Number(cleanLimit(limitValue, '30'));
+  const seedLimit = String(Math.min(10, limit));
+  const top = await api({ method: 'user.getTopTracks', user: username(), period, limit: seedLimit });
+  const results = [];
+  for (const track of top.toptracks?.track || []) {
+    const artist = trackArtist(track);
+    if (!artist || !track.name) continue;
+    const similar = await api({ method: 'track.getSimilar', artist, track: track.name, limit: '5', autocorrect: '1' });
+    for (const item of similar.similartracks?.track || []) results.push(compactSimilarTrack(item, `top-track:${artist} - ${track.name}`));
+  }
+  return { basis: 'lastfm-top-tracks', period, recommendations: results.slice(0, limit) };
+}
+
 async function findTrack(query) {
   const needle = query.toLowerCase();
   const checks = [];
@@ -97,6 +148,22 @@ async function main() {
     if (!artist) throw new Error('Usage: ./lastfm.js artist <artist_name>');
     return console.log(JSON.stringify(await api({ method: 'artist.getInfo', artist, username: username(), autocorrect: '1' }), null, 2));
   }
+  if (cmd === 'similar-track') {
+    const limit = args.at(-1) && /^\d+$/.test(args.at(-1)) ? args.pop() : '20';
+    const query = args.join(' ');
+    const separator = query.includes(' - ') ? ' - ' : '|';
+    const [artist, track] = query.split(separator).map((part) => part.trim());
+    if (!artist || !track) throw new Error('Usage: ./lastfm.js similar-track "<artist> - <track>" [limit]');
+    return console.log(JSON.stringify(await api({ method: 'track.getSimilar', artist, track, limit: cleanLimit(limit, '20'), autocorrect: '1' }), null, 2));
+  }
+  if (cmd === 'recommend') {
+    const basis = args[0] || 'artists';
+    const period = args[1] || '1month';
+    const limit = args[2] || '30';
+    if (basis === 'artists') return console.log(JSON.stringify(await recommendFromTopArtists(period, limit), null, 2));
+    if (basis === 'tracks') return console.log(JSON.stringify(await recommendFromTopTracks(period, limit), null, 2));
+    throw new Error('Usage: ./lastfm.js recommend <artists|tracks> [period] [limit]');
+  }
   if (cmd === 'similar') {
     const artist = args.slice(0, -1).join(' ') || args.join(' ');
     const maybeLimit = args.length > 1 ? args.at(-1) : undefined;
@@ -114,7 +181,9 @@ async function main() {
   ./lastfm.js top-albums [overall|7day|1month|3month|6month|12month] [limit]
   ./lastfm.js find-track <artist_or_track_query>
   ./lastfm.js artist <artist_name>
-  ./lastfm.js similar <artist_name> [limit]`);
+  ./lastfm.js similar <artist_name> [limit]
+  ./lastfm.js similar-track "<artist> - <track>" [limit]
+  ./lastfm.js recommend <artists|tracks> [period] [limit]`);
 }
 
 main().catch((error) => {
