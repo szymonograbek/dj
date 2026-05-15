@@ -1,7 +1,7 @@
 type: session
 description: One-off recommendation/session context
 path:
-  pattern: "sessions/{date}-{slug(name)}.md"
+  pattern: "sessions/{date}-{slug}.md"
 frontmatter:
   required:
     name: { type: string }

@@ -1,7 +1,7 @@
 type: artist
 description: Artist-level preference/evidence note
 path:
-  pattern: "artists/{slug(name)}.md"
+  pattern: "artists/{slug}.md"
 frontmatter:
   required:
     name: { type: string }

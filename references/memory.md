@@ -11,6 +11,36 @@ To save the body to a file for later editing, use `--save-body-to`:
 memo recall <path> --save-body-to /tmp/body.md
 ```
 
+## Creating notes
+
+Use `memo create <type>` — never write `.md` files directly.
+
+```sh
+memo create <type> --frontmatter '<json>' [--body '<text>' | --body-file <file>]
+```
+
+- `<type>` selects the template (`artist`, `track`, `preference`, `session`).
+- The file path comes from the template's `path.pattern`, interpolated with frontmatter values. **The caller must pre-compute slugs** and pass them in `--frontmatter`:
+  - `artist` → `slug`
+  - `track` → `slug` (track name) and `artist_slug` (primary artist)
+  - `preference` → `slug` plus `valid_from` (date)
+  - `session` → `slug` plus `date`
+- Use portable kebab-case slugs (lowercase, ASCII, hyphenated). Do **not** include the date prefix in `slug`; the date comes from the `valid_from` / `date` field.
+- `type`, `createdAt`, and `updatedAt` are injected automatically.
+- Body defaults to the template's seed body; override with `--body` / `--body-file` (used verbatim).
+- `create` refuses to overwrite. To change an existing note use `patch`.
+
+Examples:
+```sh
+memo create artist --frontmatter '{"name":"Beach House","slug":"beach-house","stance":"likes","tags":["dream-pop"],"sources":["user-feedback"],"spotify_id":"..."}'
+
+memo create track --frontmatter '{"name":"Space Song","slug":"space-song","artists":["Beach House"],"artist_slug":"beach-house","status":"known","tags":["dream-pop"],"sources":["user-feedback"],"spotify_id":"..."}'
+
+memo create preference --frontmatter '{"name":"Less indie","slug":"less-indie","target_type":"genre","target":"indie","stance":"avoid","strength":"medium","valid_from":"2026-05-15","tags":["genre-fatigue"]}'
+
+memo create session --frontmatter '{"name":"Friday club set","slug":"friday-club-set","date":"2026-05-15","status":"open","tags":["club"]}'
+```
+
 ## Read before writing
 
 Before creating or updating notes:
@@ -27,7 +57,7 @@ Before creating or updating notes:
    memo values <field> [type]
    ```
    Required for `type`, `status`, `stance`, `target_type`, `strength`, and `tags`.
-4. To update an existing note, use `patch` — never edit `.md` files directly:
+4. To update an existing note, use `patch`; to make a new one, use `create` (see above). Never edit `.md` files directly.
    ```sh
    # update frontmatter fields (shallow merge, bumps updatedAt)
    memo patch <path> --frontmatter '{"status":"known","tags":["electronic"]}"
@@ -122,4 +152,4 @@ Meanings:
 
 When recommending, check `memo latest preference --limit 20` first and prioritize recent/high-strength preferences.
 
-See [templates.md](templates.md) for note templates.
+Note templates live in `templates/` (`MEMORY_TEMPLATE_DIR`); each `*.memory-template.yaml` defines required/optional frontmatter and the path pattern for `memo create`.

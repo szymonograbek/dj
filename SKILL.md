@@ -20,6 +20,7 @@ description: Operate a local, code-harness-driven Spotify DJ with persistent mar
 - Spotify “Liked Songs” means only `saved-tracks` / `/me/tracks`. Playlist membership, playback, or recommendations do not mean liked/saved.
 - Only mutate Spotify when explicitly requested, and only with the allowed CLI commands below.
 - Save reusable user feedback to memory by default unless the user says not to.
+- Create new notes with `memo create <type> --frontmatter '<json>'`; update existing notes with `memo patch`. Never write `.md` files directly. See [references/memory.md](references/memory.md) for the required slug fields.
 - After adding or modifying memory notes, run `memo validate` before replying.
 
 ## Request workflows

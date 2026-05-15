@@ -1,7 +1,7 @@
 type: preference
 description: Durable or time-sensitive reusable taste note
 path:
-  pattern: "preferences/{valid_from}-{slug(name)}.md"
+  pattern: "preferences/{valid_from}-{slug}.md"
 frontmatter:
   required:
     name: { type: string }

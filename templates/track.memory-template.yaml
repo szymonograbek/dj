@@ -1,7 +1,7 @@
 type: track
 description: Track lifecycle and evidence note
 path:
-  pattern: "tracks/{slug(name)}-{slug(artists[0])}.md"
+  pattern: "tracks/{slug}-{artist_slug}.md"
 frontmatter:
   required:
     name: { type: string }
